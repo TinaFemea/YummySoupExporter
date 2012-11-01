@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Data.SQLite;
 using System.IO;
-using System.Text.RegularExpressions;
 using System.Windows.Forms;
 using YummySoupExporter.Properties;
 using System.Linq;
@@ -15,11 +14,6 @@ namespace YummySoupExporter
         public YSEForm()
         {
             InitializeComponent();
-        }
-
-        private void label1_Click(object sender, EventArgs e)
-        {
-
         }
 
         private void inputBrowse_Click(object sender, EventArgs e)
@@ -81,47 +75,78 @@ namespace YummySoupExporter
             }
         }
 
-        public class Ingredient
-        {
-            public string name;
-            public string method;
-            public string quantity;
-            public string measurement;
-            public bool isGroupTitle;
-        }
-        private string ParseIngredientsToJSON(string p)
+       private string ParseIngredientsToJSON(string p)
         {
             List<Ingredient> ingredients = new List<Ingredient>();
             //  What I have here is a mac NSDictionary.  I can't find a "real" C# parser for it, so 
             //  I'm going to parse it by hand and then spit it back out as a parsable JSON string.
             using (StringReader reader = new StringReader(p))
             {
+                Ingredient currentIngredient = new Ingredient();    // this is probably a waste of an object creation, but it saves me a lot of null-checking
+                    
                 while(true)
                 {
-                    Ingredient currentIngredient = new Ingredient();    // this is probably a waste of an object creation, but it saves me a lot of null-checking
                     string thisLine = reader.ReadLine();
                     if (thisLine == null)
                         break;
                     thisLine = thisLine.Trim();
                     if (String.IsNullOrEmpty(thisLine))
                         continue;
-                    if (thisLine.Equals("("))   // noop - first line
+                    if (thisLine.Equals("(") || thisLine.Equals("("))   // noop - first or last line
                         continue;
                     if (thisLine.Equals("{"))   //  new object
                     {
                         currentIngredient = new Ingredient();
+                        continue;
                     }
-                    if (thisLine.Equals("}"))   //  end of an object
+                    if (thisLine.StartsWith("}"))   //  end of an object
                     {
                         ingredients.Add(currentIngredient);
+                        continue;
                     }
                     //  Now, split up the rest.
-                    Regex firstWordFinder = new Regex(@"([^\s]+)( =)");
-                    
+                    string[] pieces = thisLine.Split(new [] {" = "}, 10, StringSplitOptions.RemoveEmptyEntries);
+                    if (!pieces.Any())
+                        continue;
+
+                    FillInField(pieces, currentIngredient);
                 }
             }
 
-            
+            return JSONReaderWriter<List<Ingredient>>.WriteToString(ingredients);
+        }
+
+        private void FillInField(string[] pieces, Ingredient currentIngredient)
+        {
+            string fieldName = pieces[0].Trim();
+            string value;
+
+            if (pieces.Count() == 1)
+                value = String.Empty;
+            else if (pieces.Count() == 2)
+              value = pieces[1].Trim().TrimEnd(';').Trim('\"');
+            else
+              value = String.Join(" = ", pieces, 1, pieces.Count() - 1).Trim().TrimEnd(';').Trim('\"');
+        
+
+            switch (fieldName)
+            {
+                case "name":
+                    currentIngredient.name = value;
+                    break;
+                case "quantity":
+                    currentIngredient.quantity = value;
+                    break;
+                case "method":
+                    currentIngredient.method = value;
+                    break;
+                case "measurement":
+                    currentIngredient.measurement = value;
+                    break;
+                case "isGroupTitle":
+                    currentIngredient.isGroupTitle = true;
+                    break;
+            }
         }
 
 
@@ -143,6 +168,8 @@ namespace YummySoupExporter
 
             try
             {
+                MastercookMX2Writer writer = new MastercookMX2Writer();
+                string outputPathString = outputPath.Text;  //store this, so they don't change it on us.
                 exportButton.Enabled = false;   //  don't let them keep clicking it.
                 SQLiteConnection connection = new SQLiteConnection(String.Format("Data Source={0}", inputPath.Text));
                 connection.Open();
@@ -174,6 +201,9 @@ namespace YummySoupExporter
 
                         if (!String.IsNullOrEmpty(dictionary["ingredients"]))
                             dictionary["ingredients"] = ParseIngredientsToJSON(dictionary["ingredients"]);
+
+                        writer.WriteOneFile(dictionary, outputPathString);
+                        exportProgressBar.PerformStep();
                     }
                 }
                 
@@ -190,7 +220,6 @@ namespace YummySoupExporter
             }
             
         }
-
        
     }
 }

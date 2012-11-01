@@ -55,7 +55,6 @@
             this.label1.Size = new System.Drawing.Size(180, 13);
             this.label1.TabIndex = 1;
             this.label1.Text = "Location of \"Library Database.SQL\":";
-            this.label1.Click += new System.EventHandler(this.label1_Click);
             // 
             // inputBrowse
             // 

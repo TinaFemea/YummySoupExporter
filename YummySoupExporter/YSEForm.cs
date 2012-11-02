@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Data.SQLite;
 using System.IO;
+using System.Text.RegularExpressions;
 using System.Windows.Forms;
 using YummySoupExporter.Properties;
 using System.Linq;
@@ -195,14 +196,22 @@ namespace YummySoupExporter
                             //  starting with Z?
                             string friendlyName = GetFriendlyName(key);
                             if (!String.IsNullOrEmpty(friendlyName))
-                                dictionary.Add(friendlyName, row[key]);
+                                dictionary.Add(friendlyName, Utils.RemoveUnicode(row[key]));
 
                         }
 
                         if (!String.IsNullOrEmpty(dictionary["ingredients"]))
                             dictionary["ingredients"] = ParseIngredientsToJSON(dictionary["ingredients"]);
 
-                        writer.WriteOneFile(dictionary, outputPathString);
+                       
+                        try
+                        {
+                            writer.WriteOneFile(dictionary, outputPathString);
+                        }
+                        catch (Exception exception)
+                        {
+                            MessageBox.Show(this, exception.Message, Resources.Error, MessageBoxButtons.OK, MessageBoxIcon.Error); 
+                        }
                         exportProgressBar.PerformStep();
                     }
                 }
@@ -220,6 +229,6 @@ namespace YummySoupExporter
             }
             
         }
-       
+        
     }
 }

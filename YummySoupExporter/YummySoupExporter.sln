@@ -3,6 +3,8 @@ Microsoft Visual Studio Solution File, Format Version 11.00
 # Visual Studio 2010
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "YummySoupExporter", "YummySoupExporter.csproj", "{10D7A262-4C7A-4397-8B8F-BEFC8883C452}"
 EndProject
+Project("{54435603-DBB4-11D2-8724-00A0C9A8B90C}") = "YSESetup", "..\YSESetup\YSESetup.vdproj", "{6996F238-538C-47E9-B3F9-564F1EECAE70}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x86 = Debug|x86
@@ -13,6 +15,8 @@ Global
 		{10D7A262-4C7A-4397-8B8F-BEFC8883C452}.Debug|x86.Build.0 = Debug|x86
 		{10D7A262-4C7A-4397-8B8F-BEFC8883C452}.Release|x86.ActiveCfg = Release|x86
 		{10D7A262-4C7A-4397-8B8F-BEFC8883C452}.Release|x86.Build.0 = Release|x86
+		{6996F238-538C-47E9-B3F9-564F1EECAE70}.Debug|x86.ActiveCfg = Debug
+		{6996F238-538C-47E9-B3F9-564F1EECAE70}.Release|x86.ActiveCfg = Release
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

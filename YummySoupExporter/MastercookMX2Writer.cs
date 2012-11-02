@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Collections.Specialized;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
@@ -9,7 +8,9 @@ using System.Xml.Serialization;
 
 namespace YummySoupExporter
 {
-   
+
+    //  Huge thanks to the author of http://krecipes.sourcearchive.com/documentation/2.0~beta2-3/mx2exporter_8cpp_source.html.  
+    //  Showed me a lot of less-commonly used tags.
 
     [XmlRootAttribute("mx2")]
     public class MastercookRecipe
@@ -34,6 +35,15 @@ namespace YummySoupExporter
             [XmlElement("IPrp")]
             public string prep;
         }
+
+        public class Yield
+        {
+            [XmlAttribute]
+            public string unit;
+            [XmlAttribute]
+            public string qty;
+            
+        }
         public class Recipe
         {
             [XmlAttribute]
@@ -42,6 +52,12 @@ namespace YummySoupExporter
             [DefaultValue("qwerty")]    //  This is evil.  I need to always have an author tag written, and the serializer won't write out a value equal to the default.
             //  So we set the default to something unlikely.
             public string author;
+
+            [XmlElement("Serv")] 
+            public string servings;
+
+            [XmlElement("PrpT")]
+            public string prepTime;
 
             [XmlArray("CatS")]
             [XmlArrayItem("CatT")]
@@ -55,6 +71,17 @@ namespace YummySoupExporter
             [XmlArray("DirS")]
             [XmlArrayItem("DirT")]
             public string[] directions;
+
+            [XmlElement("Srce")]
+            public string source;
+
+            [XmlElement("Yield")]
+            public Yield yield;
+
+            [XmlArray("RatS")]
+            [XmlArrayItem("RatE")]
+            public string[] rating;  // only ever has one.  See note above.
+
         }
         [XmlAttribute]
         public string source = "MasterCook";
@@ -91,49 +118,69 @@ namespace YummySoupExporter
             return returnString;
         }
         
-        public void WriteOneFile(StringDictionary inputRecipe, string outputPath)
+        public void WriteOneFile(Dictionary<CommonFields, string> inputRecipe, string outputPath)
         {
-            if (!inputRecipe.ContainsKey("name") || String.Equals(inputRecipe["name"], "New Recipe"))
+            if (!inputRecipe.ContainsKey(CommonFields.name) || String.Equals(inputRecipe[CommonFields.name], "New Recipe"))
                 return;
 
-            MastercookRecipe recipe = new MastercookRecipe();
-            recipe.summary = new MastercookRecipe.Summary {Name = inputRecipe["name"]};
-            recipe.recipe = new MastercookRecipe.Recipe {name = inputRecipe["name"], author = String.Empty};
-            List<MastercookRecipe.Ingredient> outputIngredients = new List<MastercookRecipe.Ingredient>();
-            
-            if (inputRecipe.ContainsKey("ingredients"))
+            MastercookRecipe recipe = new MastercookRecipe{
+                                              summary = new MastercookRecipe.Summary {Name = inputRecipe[CommonFields.name]},
+                                              recipe = new MastercookRecipe.Recipe
+                                                      {name = inputRecipe[CommonFields.name], author = String.Empty}
+                                          };
+            if (inputRecipe.ContainsKey(CommonFields.ingredients))
             {
                 List<Ingredient> inputIngredients =
-                    JSONReaderWriter<List<Ingredient>>.ReadFromString(inputRecipe["ingredients"]);
-                foreach (Ingredient inputIngredient in inputIngredients)
-                {
-                    MastercookRecipe.Ingredient outputIngredient = new MastercookRecipe.Ingredient
-                                                                       {
-                                                                           code =
-                                                                               inputIngredient.isGroupTitle ? "G" : "I",
-                                                                           name = inputIngredient.name,
-                                                                           prep = inputIngredient.method,
-                                                                           qty = inputIngredient.quantity,
-                                                                           unit = inputIngredient.measurement
-                                                                       };
-                    outputIngredients.Add(outputIngredient);
-                }
-                recipe.recipe.ingredients = outputIngredients.ToArray();
+                    JSONReaderWriter<List<Ingredient>>.ReadFromString(inputRecipe[CommonFields.ingredients]);
+                recipe.recipe.ingredients = inputIngredients.Select(inputIngredient => new MastercookRecipe.Ingredient{
+                                                                                               code = inputIngredient.isGroupTitle ? "S"  : "I",
+                                                                                               name = inputIngredient.name,
+                                                                                               prep = inputIngredient.method,
+                                                                                               qty = inputIngredient.isGroupTitle ? "" : inputIngredient.quantity,
+                                                                                               unit = inputIngredient.measurement
+                                                                                           }).ToArray();
             }
-            if (inputRecipe.ContainsKey("keywords"))
-                recipe.recipe.categories = inputRecipe["keywords"].Split(new []{','}, StringSplitOptions.RemoveEmptyEntries);
+
+            if (inputRecipe.ContainsKey(CommonFields.prepTime))
+                recipe.recipe.prepTime = inputRecipe[CommonFields.prepTime];
 
 
-            if (inputRecipe.ContainsKey("directions"))
-                recipe.recipe.directions = inputRecipe["directions"].Split(new []{"\n\n"}, StringSplitOptions.RemoveEmptyEntries);
+            if (inputRecipe.ContainsKey(CommonFields.keywords))
+                recipe.recipe.categories = inputRecipe[CommonFields.keywords].Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
 
+
+            if (inputRecipe.ContainsKey(CommonFields.directions))
+                recipe.recipe.directions = inputRecipe[CommonFields.directions].Split(new[] { "\n\n" }, StringSplitOptions.RemoveEmptyEntries);
+
+            if (inputRecipe.ContainsKey(CommonFields.importedFrom))
+                recipe.recipe.source = inputRecipe[CommonFields.importedFrom];
+
+            if (inputRecipe.ContainsKey(CommonFields.yield))
+            {
+                string[] words = inputRecipe[CommonFields.yield].Split(new []{' '}, StringSplitOptions.RemoveEmptyEntries);    //  we don't have a seperate quantity and unit.  
+                if (words.Count() == 1)
+                    recipe.recipe.yield = new MastercookRecipe.Yield { qty = "1", unit = words[0] };
+                else if (words.Any())
+                    recipe.recipe.yield = new MastercookRecipe.Yield
+                                              {
+                                                  qty = String.Join(" ", words, 0, words.Count() - 1),
+                                                  unit = words[words.Count() - 1]
+                                              };
+            }
+
+            if (inputRecipe.ContainsKey(CommonFields.rating))
+            {
+                int rating;
+                if (int.TryParse(inputRecipe[CommonFields.rating], out rating) && (rating != 0))
+                    recipe.recipe.rating = new []{(rating*2).ToString()}; // mastercook uses a 10-point scale.
+            }
             string output = WriteToString(recipe);
 
 
-            string fileName = Path.Combine(outputPath, Utils.CleanFileName(inputRecipe["name"] + ".mx2"));
-            int counter = 0;
+            string fileName = Path.Combine(outputPath, Utils.CleanFileName(inputRecipe[CommonFields.name] + ".mx2"));
+            int counter = 1;
             while(File.Exists(fileName))
-                fileName = Path.Combine(outputPath, Utils.CleanFileName(inputRecipe["name"] + counter++.ToString() + ".mx2"));
+                fileName = Path.Combine(outputPath, Utils.CleanFileName(String.Format("{0}_{1}.mx2", inputRecipe[CommonFields.name], counter++)));
 
             using (FileStream stream = new FileStream(fileName, FileMode.Create))
             {

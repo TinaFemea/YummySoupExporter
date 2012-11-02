@@ -37,46 +37,47 @@ namespace YummySoupExporter
             }
         }
 
-        private string GetFriendlyName(string rowName)
+
+        private CommonFields GetFriendlyName(string rowName)
         {
             switch (rowName)
             {
                 case "ZHASBEENPREPARED":
-                    return "hasBeenPrepared";
+                    return CommonFields.hasBeenPrepared;
                 case "ZDIFFICULTY":
-                    return "difficulty";
+                    return CommonFields.difficulty;
                 case "ZRATING":
-                    return "rating";
+                    return CommonFields.rating;
                 case "ZCOOKINGTIME":
-                    return "cookingTime";
+                    return CommonFields.cookingTime;
                 case "ZINACTIVEPREPTIME":
-                    return "inactivePrepTime";
+                    return CommonFields.inactivePrepTime;
                 case "ZPREPTIME":
-                    return "prepTime";
+                    return CommonFields.prepTime;
                 case "ZKEYWORDS":
-                    return "keywords";
+                    return CommonFields.keywords;
                 case "ZNAME":
-                    return "name";
+                    return CommonFields.name;
                 case "ZYIELD":
-                    return "yield";
+                    return CommonFields.yield;
                 case "ZRECIPEDESCRIPTION":
-                    return "description";
+                    return CommonFields.description;
                 case "ZNOTES":
-                    return "notes";
+                    return CommonFields.notes;
                 case "ZDIRECTIONS":
-                    return "directions";
+                    return CommonFields.directions;
                 case "ZIMPORTEDFROMURL":
-                    return "importedFrom";
+                    return CommonFields.importedFrom;
                 case "ZINGREDIENTSARRAY":
-                    return "ingredients";
+                    return CommonFields.ingredients;
                 case "ZATTRIBUTION":
-                    return "attribution";
+                    return CommonFields.attribution;
                 default:
-                    return String.Empty;
+                    return CommonFields.unknown;
             }
         }
 
-       private string ParseIngredientsToJSON(string p)
+        private string ParseIngredientsToJSON(string p)
         {
             List<Ingredient> ingredients = new List<Ingredient>();
             //  What I have here is a mac NSDictionary.  I can't find a "real" C# parser for it, so 
@@ -84,8 +85,8 @@ namespace YummySoupExporter
             using (StringReader reader = new StringReader(p))
             {
                 Ingredient currentIngredient = new Ingredient();    // this is probably a waste of an object creation, but it saves me a lot of null-checking
-                    
-                while(true)
+
+                while (true)
                 {
                     string thisLine = reader.ReadLine();
                     if (thisLine == null)
@@ -102,11 +103,12 @@ namespace YummySoupExporter
                     }
                     if (thisLine.StartsWith("}"))   //  end of an object
                     {
+                        NormalizeMeasurements(currentIngredient);
                         ingredients.Add(currentIngredient);
                         continue;
                     }
                     //  Now, split up the rest.
-                    string[] pieces = thisLine.Split(new [] {" = "}, 10, StringSplitOptions.RemoveEmptyEntries);
+                    string[] pieces = thisLine.Split(new[] { " = " }, 10, StringSplitOptions.RemoveEmptyEntries);
                     if (!pieces.Any())
                         continue;
 
@@ -125,10 +127,10 @@ namespace YummySoupExporter
             if (pieces.Count() == 1)
                 value = String.Empty;
             else if (pieces.Count() == 2)
-              value = pieces[1].Trim().TrimEnd(';').Trim('\"');
+                value = pieces[1].Trim().TrimEnd(';').Trim('\"');
             else
-              value = String.Join(" = ", pieces, 1, pieces.Count() - 1).Trim().TrimEnd(';').Trim('\"');
-        
+                value = String.Join(" = ", pieces, 1, pieces.Count() - 1).Trim().TrimEnd(';').Trim('\"');
+
 
             switch (fieldName)
             {
@@ -145,11 +147,31 @@ namespace YummySoupExporter
                     currentIngredient.measurement = value;
                     break;
                 case "isGroupTitle":
-                    currentIngredient.isGroupTitle = true;
+                    if (!value.Equals("NO", StringComparison.OrdinalIgnoreCase) && !value.Equals("0", StringComparison.OrdinalIgnoreCase))
+                        currentIngredient.isGroupTitle = true;
                     break;
             }
         }
 
+        private void NormalizeMeasurements(Ingredient ingred)
+        {
+            if (!String.IsNullOrEmpty(ingred.measurement))
+            {
+                bool needsPluralized = false;
+                double measurement;
+                if (!String.IsNullOrEmpty(ingred.quantity) && double.TryParse(ingred.quantity, out measurement) && (measurement > 1))
+                    needsPluralized = true;
+
+                if (ingred.measurement.Equals("tsp", StringComparison.OrdinalIgnoreCase) ||
+                    ingred.measurement.Equals("tsp.", StringComparison.OrdinalIgnoreCase))
+                    ingred.measurement = needsPluralized ? "teaspoons" : "teaspoon";
+                if (ingred.measurement.Equals("Tbsp", StringComparison.OrdinalIgnoreCase) ||
+                    ingred.measurement.Equals("tbsp.", StringComparison.OrdinalIgnoreCase))
+                    ingred.measurement = needsPluralized ? "tablespoons" : "tablespoon";
+
+
+            }
+        }
 
         private void exportButton_Click(object sender, EventArgs e)
         {
@@ -174,12 +196,12 @@ namespace YummySoupExporter
                 exportButton.Enabled = false;   //  don't let them keep clicking it.
                 SQLiteConnection connection = new SQLiteConnection(String.Format("Data Source={0}", inputPath.Text));
                 connection.Open();
-                
+
                 SQLiteCommand countCommand = connection.CreateCommand();
                 countCommand.CommandText = "select count(*) from ZRECIPES";
                 long count = (long)countCommand.ExecuteScalar();
 
-                exportProgressBar.Maximum = (int) count;    //  is anyone ever going to have more then MaxInt recipes?  
+                exportProgressBar.Maximum = (int)count;    //  is anyone ever going to have more then MaxInt recipes?  
 
                 SQLiteCommand getRowCommand = connection.CreateCommand();
                 getRowCommand.CommandText = "select * from ZRECIPES";
@@ -188,34 +210,34 @@ namespace YummySoupExporter
                 {
                     while (reader.Read())
                     {
-                        StringDictionary dictionary = new StringDictionary();
+                        Dictionary<CommonFields, string> dictionary = new Dictionary<CommonFields, string>();
                         NameValueCollection row = reader.GetValues();
                         foreach (string key in row.Keys)
                         {
                             //  turn the keys into something more generic.  Why the heck are all these columns
                             //  starting with Z?
-                            string friendlyName = GetFriendlyName(key);
-                            if (!String.IsNullOrEmpty(friendlyName))
-                                dictionary.Add(friendlyName, Utils.RemoveUnicode(row[key]));
+                            CommonFields friendlyName = GetFriendlyName(key);
+                            if (friendlyName != CommonFields.unknown)
+                                dictionary.Add(friendlyName, Utils.CleanText(row[key]));
 
                         }
 
-                        if (!String.IsNullOrEmpty(dictionary["ingredients"]))
-                            dictionary["ingredients"] = ParseIngredientsToJSON(dictionary["ingredients"]);
+                        if (!String.IsNullOrEmpty(dictionary[CommonFields.ingredients]))
+                            dictionary[CommonFields.ingredients] = ParseIngredientsToJSON(dictionary[CommonFields.ingredients]);
 
-                       
+
                         try
                         {
                             writer.WriteOneFile(dictionary, outputPathString);
                         }
                         catch (Exception exception)
                         {
-                            MessageBox.Show(this, exception.Message, Resources.Error, MessageBoxButtons.OK, MessageBoxIcon.Error); 
+                            MessageBox.Show(this, exception.Message, Resources.Error, MessageBoxButtons.OK, MessageBoxIcon.Error);
                         }
                         exportProgressBar.PerformStep();
                     }
                 }
-                
+
                 connection.Close();
             }
             catch (Exception exception)
@@ -227,8 +249,8 @@ namespace YummySoupExporter
             {
                 exportButton.Enabled = true;
             }
-            
+
         }
-        
+
     }
 }

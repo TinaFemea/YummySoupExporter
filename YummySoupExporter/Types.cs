@@ -38,6 +38,8 @@ namespace YummySoupExporter
             string temp = source.Replace(@"\U00bd", @" 1/2").Trim();
             temp = temp.Replace(@"\U00bc", @" 1/4").Trim();
             temp = temp.Replace(@"\U2033", "in");
+            temp = temp.Replace(@"\U2019", "'");
+
             return Regex.Replace(temp, @"[^\u0000-\u007F]", string.Empty);
         }
 
